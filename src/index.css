@@ -1,0 +1,378 @@
+@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Space+Grotesk:wght@500;700&display=swap");
+@import "tailwindcss";
+
+/*
+ * ============================================================
+ * 全域基礎樣式
+ * ============================================================
+ */
+
+/*
+ * 深淺色主題變數
+ * 使用 CSS custom properties 搭配 Tailwind dark mode
+ */
+:root {
+  --color-bg: #f7fbff;
+  --color-bg-elevated: #ffffff;
+  --color-text: #101323;
+  --color-text-muted: #455076;
+  --color-primary: #1570ef;
+  --color-primary-soft: #d6e9ff;
+  --color-border: #d8e0f4;
+  --shadow-soft: 0 15px 50px -25px rgb(4 29 73 / 35%);
+}
+
+.dark {
+  --color-bg: #050816;
+  --color-bg-elevated: #0f1730;
+  --color-text: #f2f6ff;
+  --color-text-muted: #b8c4e7;
+  --color-primary: #65b2ff;
+  --color-primary-soft: #17355f;
+  --color-border: #233253;
+  --shadow-soft: 0 16px 56px -28px rgb(0 0 0 / 70%);
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family:
+    "Noto Sans TC",
+    system-ui,
+    -apple-system,
+    sans-serif;
+  min-height: 100svh;
+}
+
+#root {
+  min-height: 100svh;
+}
+
+.hero-glow {
+  background:
+    radial-gradient(circle at 25% 15%, rgb(18 107 242 / 28%), transparent 42%),
+    radial-gradient(circle at 92% 8%, rgb(42 202 158 / 22%), transparent 36%),
+    radial-gradient(circle at 80% 80%, rgb(255 129 76 / 16%), transparent 42%);
+}
+
+.glass-card {
+  backdrop-filter: blur(14px);
+  background-color: color-mix(in srgb, var(--color-bg-elevated) 84%, transparent);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-soft);
+}
+
+.title-font {
+  font-family:
+    "Space Grotesk",
+    "Noto Sans TC",
+    sans-serif;
+}
+
+.mode-pill {
+  cursor: pointer;
+  border-radius: 0.65rem;
+  border: 1px solid var(--color-border);
+  background-color: var(--color-bg-elevated);
+  padding: 0.45rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--color-text);
+  transition: 160ms ease;
+}
+
+.mode-pill:hover {
+  border-color: var(--color-primary);
+}
+
+.mode-pill-active {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+
+.control-btn {
+  cursor: pointer;
+  border-radius: 0.65rem;
+  border: 1px solid var(--color-border);
+  background-color: var(--color-bg-elevated);
+  padding: 0.48rem 0.82rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--color-text);
+  transition: 180ms ease;
+}
+
+.control-btn:hover {
+  border-color: var(--color-primary);
+  transform: translateY(-1px);
+}
+
+.control-btn-primary {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+
+.slide-frame {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-border);
+  border-radius: 1rem;
+  background-color: var(--color-bg-elevated);
+  background-repeat: no-repeat;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 4%);
+  padding: 1.1rem;
+}
+
+.slide-frame-image-layout {
+  padding: 0;
+  overflow: hidden;
+}
+
+.thumb-card {
+  display: block;
+  width: 100%;
+  cursor: pointer;
+  border-radius: 0.9rem;
+  border: 1px solid var(--color-border);
+  background-color: var(--color-bg-elevated);
+  padding: 0.68rem;
+  text-align: left;
+  transition: 180ms ease;
+}
+
+.thumb-card:hover {
+  border-color: var(--color-primary);
+  transform: translateY(-1px);
+}
+
+.thumb-card-active {
+  border-color: var(--color-primary);
+  background-color: color-mix(in srgb, var(--color-primary-soft) 38%, var(--color-bg-elevated));
+}
+
+.thumb-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.slide-markdown {
+  line-height: 1.75;
+  color: var(--color-text);
+}
+
+.slide-markdown h1,
+.slide-markdown h2,
+.slide-markdown h3 {
+  margin-bottom: 0.65rem;
+  font-family:
+    "Space Grotesk",
+    "Noto Sans TC",
+    sans-serif;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.slide-markdown h1 {
+  font-size: clamp(1.7rem, 3.2vw, 2.6rem);
+}
+
+.slide-markdown h2 {
+  font-size: clamp(1.45rem, 2.4vw, 2rem);
+}
+
+.slide-markdown p,
+.slide-markdown ul,
+.slide-markdown ol {
+  margin-bottom: 0.75rem;
+  font-size: clamp(1rem, 1.8vw, 1.15rem);
+}
+
+.slide-markdown ul,
+.slide-markdown ol {
+  padding-left: 1.3rem;
+}
+
+.slide-markdown ul {
+  list-style-type: disc;
+}
+
+.slide-markdown ol {
+  list-style-type: decimal;
+}
+
+.slide-markdown code {
+  border-radius: 0.4rem;
+  background-color: color-mix(in srgb, var(--color-primary-soft) 45%, transparent);
+  padding: 0.1rem 0.4rem;
+  font-size: 0.9em;
+}
+
+.slide-markdown pre {
+  overflow-x: auto;
+  border-radius: 0.75rem;
+  border: 1px solid var(--color-border);
+  background-color: color-mix(in srgb, var(--color-bg) 75%, #000 25%);
+  padding: 0.9rem;
+}
+
+.slide-markdown pre code {
+  background-color: transparent;
+  padding: 0;
+}
+
+.slide-markdown blockquote {
+  border-left: 4px solid var(--color-primary);
+  margin: 0.8rem 0;
+  padding-left: 0.9rem;
+  color: var(--color-text-muted);
+}
+
+.slide-markdown-compact h1 {
+  font-size: 1.5rem;
+}
+
+.slide-markdown-compact h2 {
+  font-size: 1.3rem;
+}
+
+.slide-markdown-compact p,
+.slide-markdown-compact ul,
+.slide-markdown-compact ol {
+  font-size: 0.95rem;
+}
+
+.slide-markdown-align-center pre {
+  width: fit-content;
+  max-width: 100%;
+  margin-inline: auto;
+  text-align: left;
+}
+
+.slide-markdown-align-right pre {
+  width: fit-content;
+  max-width: 100%;
+  margin-left: auto;
+  text-align: left;
+}
+
+.slide-layout-cover,
+.slide-layout-intro,
+.slide-layout-end,
+.slide-layout-section {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 100%;
+}
+
+.slide-layout-cover h1,
+.slide-layout-intro h1,
+.slide-layout-end h1,
+.slide-layout-section h1 {
+  font-size: clamp(2.2rem, 5vw, 4rem);
+  line-height: 1.1;
+}
+
+.slide-layout-cover p,
+.slide-layout-intro p {
+  max-width: 70ch;
+}
+
+.slide-layout-quote blockquote {
+  border-left-width: 0;
+  padding-left: 0;
+  font-size: clamp(1.4rem, 3.1vw, 2.4rem);
+  line-height: 1.4;
+  color: var(--color-text);
+}
+
+.slide-layout-statement {
+  display: flex;
+  align-items: center;
+  min-height: 100%;
+}
+
+.slide-layout-statement p,
+.slide-layout-statement h1,
+.slide-layout-statement h2 {
+  font-size: clamp(1.6rem, 4.5vw, 3.4rem);
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.slide-layout-fact {
+  display: flex;
+  align-items: center;
+  min-height: 100%;
+}
+
+.slide-layout-fact h1,
+.slide-layout-fact h2 {
+  font-size: clamp(2.2rem, 6vw, 4.2rem);
+  margin-bottom: 0.3rem;
+}
+
+.slide-layout-fact p {
+  font-size: clamp(1.2rem, 2.6vw, 2rem);
+}
+
+.slide-layout-full {
+  min-height: 100%;
+}
+
+.slide-two-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.2rem;
+}
+
+.slide-two-cols-pane {
+  min-width: 0;
+}
+
+.slide-two-cols-header {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 1.2rem;
+}
+
+.slide-two-cols-header-bottom {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.2rem;
+}
+
+.slide-layout-image-shell {
+  display: grid;
+  grid-template-columns: minmax(200px, 40%) 1fr;
+  gap: 1rem;
+  min-height: 100%;
+  height: 100%;
+  align-items: stretch;
+}
+
+.slide-layout-image-pane {
+  border-radius: 0;
+  background-size: cover;
+  background-position: center;
+  background-color: color-mix(in srgb, var(--color-primary-soft) 55%, var(--color-bg));
+  border: 0;
+  min-height: 100%;
+}
+
+.slide-layout-image-content {
+  min-width: 0;
+  padding: 1.1rem;
+}
+
+@media (max-width: 768px) {
+  .slide-two-cols,
+  .slide-two-cols-header-bottom,
+  .slide-layout-image-shell {
+    grid-template-columns: 1fr;
+  }
+}
