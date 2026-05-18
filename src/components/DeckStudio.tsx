@@ -58,6 +58,8 @@ interface MarkdownTool extends LayoutTemplate {
   group: '版型' | '指令' | '元件';
   /** 插入後預先選取的字串，方便使用者立即覆寫 */
   placeholder?: string;
+  /** 插入位置：cursor 跟游標；slide-top 放到當前投影片最上方 */
+  placement?: 'cursor' | 'slide-top';
 }
 
 type VerticalAlignment = 'top' | 'middle' | 'bottom';
@@ -103,12 +105,14 @@ const markdownTools: MarkdownTool[] = [
     group: '指令',
     markdown: ':::bg https://example.com/image.jpg\n',
     placeholder: 'https://example.com/image.jpg',
+    placement: 'slide-top',
   },
   {
     label: '比例',
     group: '指令',
     markdown: ':::ratio 45:55\n',
     placeholder: '45:55',
+    placement: 'slide-top',
   },
   {
     label: '講者備註',
@@ -117,10 +121,29 @@ const markdownTools: MarkdownTool[] = [
     placeholder: '這裡放講者備註。',
   },
   {
+    label: '表格斑馬紋',
+    group: '指令',
+    markdown: ':::zebra\n',
+    placement: 'slide-top',
+  },
+  {
+    label: '表格框線',
+    group: '指令',
+    markdown: ':::table-border\n',
+    placement: 'slide-top',
+  },
+  {
     label: '按鈕',
     group: '元件',
     markdown: '::button[了解更多](https://example.com)\n',
     placeholder: '了解更多',
+  },
+  {
+    label: '表格',
+    group: '元件',
+    markdown:
+      '| 標題1 | 標題2 | 標題3 |\n| --- | --- | --- |\n| 內容1 | 內容2 | 內容3 |\n| 內容4 | 內容5 | 內容6 |\n',
+    placeholder: '標題1',
   },
 ];
 
@@ -380,6 +403,13 @@ export function DeckStudio() {
   const presenterThumbsRef = useRef<HTMLDivElement | null>(null);
   const editorThumbsRef = useRef<HTMLDivElement | null>(null);
   const previousSlideIndexRef = useRef(0);
+  const [draggedThumbIndex, setDraggedThumbIndex] = useState<number | null>(
+    null,
+  );
+  const [thumbDropIndicator, setThumbDropIndicator] = useState<{
+    index: number;
+    position: 'before' | 'after';
+  } | null>(null);
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
   const [currentFileHandle, setCurrentFileHandle] =
     useState<FileHandleLike | null>(null);
@@ -675,6 +705,43 @@ export function DeckStudio() {
     setActiveIndex(clamp(safeIndex + 1, 0, Math.max(slides.length - 1, 0)));
   }
 
+  /**
+   * 依拖曳結果重排投影片
+   * 直接操作 markdown chunk，並修正 activeIndex 讓游標跟著移動的那張
+   */
+  function handleReorderSlides(fromIndex: number, toIndex: number): void {
+    if (fromIndex === toIndex) {
+      return;
+    }
+    const chunks = markdown
+      .split(/\n-{3,}\n/g)
+      .map((chunk) => chunk.replace(/^\s+|\s+$/g, ''))
+      .filter(Boolean);
+    if (
+      fromIndex < 0 ||
+      fromIndex >= chunks.length ||
+      toIndex < 0 ||
+      toIndex > chunks.length
+    ) {
+      return;
+    }
+    const [moved] = chunks.splice(fromIndex, 1);
+    const adjustedTo = toIndex > fromIndex ? toIndex - 1 : toIndex;
+    chunks.splice(adjustedTo, 0, moved);
+    setMarkdown(chunks.join('\n\n---\n\n'));
+
+    // 同步 activeIndex：拖到的那張優先跟隨；非該張時依移動方向位移
+    let nextActiveIndex = safeIndex;
+    if (safeIndex === fromIndex) {
+      nextActiveIndex = adjustedTo;
+    } else if (fromIndex < safeIndex && adjustedTo >= safeIndex) {
+      nextActiveIndex = safeIndex - 1;
+    } else if (fromIndex > safeIndex && adjustedTo <= safeIndex) {
+      nextActiveIndex = safeIndex + 1;
+    }
+    setActiveIndex(nextActiveIndex);
+  }
+
   /** 從縮圖切換投影片，並同步捲動 Markdown 編輯器到對應頁面 */
   function handleSelectSlideFromThumbnail(index: number): void {
     setActiveIndex(index);
@@ -909,6 +976,55 @@ export function DeckStudio() {
     }
   }
 
+  /**
+   * 將指令插入到目前投影片的最上方
+   * 例如背景圖、比例、表格樣式等屬於整頁設定的指令
+   */
+  function insertDirectiveAtSlideTop(
+    snippet: string,
+    placeholder?: string,
+  ): void {
+    const editor = editorRef.current;
+    const separatorPattern = /\n-{3,}\n/g;
+    let slideStart = 0;
+    let currentIndex = 0;
+    let match = separatorPattern.exec(markdown);
+    while (match) {
+      if (currentIndex === safeIndex) {
+        break;
+      }
+      currentIndex += 1;
+      slideStart = match.index + match[0].length;
+      match = separatorPattern.exec(markdown);
+    }
+
+    // 若投影片開頭已連續存在 ::: 指令，將新指令插到既有指令之後
+    let insertPos = slideStart;
+    while (insertPos < markdown.length) {
+      const lineEnd = markdown.indexOf('\n', insertPos);
+      const lineContent = markdown.slice(insertPos, lineEnd === -1 ? undefined : lineEnd);
+      if (!/^\s*:::/i.test(lineContent)) {
+        break;
+      }
+      insertPos = lineEnd === -1 ? markdown.length : lineEnd + 1;
+    }
+
+    const trimmedSnippet = snippet.endsWith('\n') ? snippet : `${snippet}\n`;
+    const nextMarkdown =
+      markdown.slice(0, insertPos) + trimmedSnippet + markdown.slice(insertPos);
+    const previousScrollTop = editor?.scrollTop ?? 0;
+    setMarkdown(nextMarkdown);
+    if (editor) {
+      applyInsertedSelection(
+        editor,
+        insertPos,
+        trimmedSnippet,
+        previousScrollTop,
+        placeholder,
+      );
+    }
+  }
+
   /** 在 Markdown 編輯器目前游標位置插入片段 */
   function insertMarkdownAtCursor(snippet: string, placeholder?: string): void {
     const editor = editorRef.current;
@@ -966,6 +1082,12 @@ export function DeckStudio() {
         tool.markdown,
       );
     }
+    if (tool.placement === 'slide-top') {
+      event.dataTransfer.setData(
+        'application/x-deckflow-slide-top',
+        tool.markdown,
+      );
+    }
   }
 
   /** 拖曳工具列片段進入編輯區時提供高亮提示 */
@@ -996,12 +1118,21 @@ export function DeckStudio() {
     event.preventDefault();
     const layoutTemplate =
       event.dataTransfer.getData('application/x-deckflow-layout') || '';
+    const slideTopSnippet =
+      event.dataTransfer.getData('application/x-deckflow-slide-top') || '';
     const placeholder =
       event.dataTransfer.getData('application/x-deckflow-placeholder') ||
       undefined;
     if (layoutTemplate) {
       // 版型一律新增為下一張投影片，不切碎既有內容
       handleInsertLayoutTemplate(layoutTemplate, placeholder);
+      setIsEditorDropActive(false);
+      setEditorDropLineTop(null);
+      return;
+    }
+    if (slideTopSnippet) {
+      // 整頁設定指令一律放到當前投影片最上方
+      insertDirectiveAtSlideTop(slideTopSnippet, placeholder);
       setIsEditorDropActive(false);
       setEditorDropLineTop(null);
       return;
@@ -1259,6 +1390,13 @@ export function DeckStudio() {
                             );
                             return;
                           }
+                          if (tool.placement === 'slide-top') {
+                            insertDirectiveAtSlideTop(
+                              tool.markdown,
+                              tool.placeholder,
+                            );
+                            return;
+                          }
                           insertMarkdownAtCursor(
                             tool.markdown,
                             tool.placeholder,
@@ -1393,6 +1531,8 @@ export function DeckStudio() {
                   layout={activeSlide?.layout}
                   background={activeSlide?.background}
                   ratio={activeSlide?.ratio}
+                  tableZebra={activeSlide?.tableZebra}
+                  tableBordered={activeSlide?.tableBordered}
                 />
               </div>
             </article>
@@ -1461,32 +1601,100 @@ export function DeckStudio() {
               ref={editorThumbsRef}
               className="app-scrollbar min-h-0 flex-1 space-y-2 overflow-y-auto px-1 pt-1 pb-1"
             >
-              {slides.map((slide, index) => (
-                <button
-                  key={slide.id}
-                  type="button"
-                  data-thumb-index={index}
-                  className={`thumb-card ${index === safeIndex ? 'thumb-card-active' : ''}`}
-                  onClick={(event) => {
-                    handleSelectSlideFromThumbnail(index);
-                    // 點到的不是最後一張時，把下一張也帶入視野；最後一張僅捲動自己
-                    const target =
-                      event.currentTarget.nextElementSibling ??
-                      event.currentTarget;
-                    target.scrollIntoView({
-                      block: 'nearest',
-                      behavior: 'smooth',
-                    });
-                  }}
-                >
-                  <p className="mb-1 text-xs font-semibold text-[var(--color-primary)]">
-                    #{index + 1}
-                  </p>
-                  <p className="thumb-title text-left text-sm font-semibold text-[var(--color-text)]">
-                    {slide.title}
-                  </p>
-                </button>
-              ))}
+              {slides.map((slide, index) => {
+                const isDragging = draggedThumbIndex === index;
+                const showIndicatorBefore =
+                  thumbDropIndicator?.index === index &&
+                  thumbDropIndicator.position === 'before';
+                const showIndicatorAfter =
+                  thumbDropIndicator?.index === index &&
+                  thumbDropIndicator.position === 'after';
+                return (
+                  <div key={slide.id} className="relative">
+                    {showIndicatorBefore && (
+                      <div className="pointer-events-none absolute -top-1 right-1 left-1 z-10 h-0.5 rounded-full bg-[var(--color-primary)]" />
+                    )}
+                    <button
+                      type="button"
+                      draggable
+                      data-thumb-index={index}
+                      className={`thumb-card w-full cursor-grab active:cursor-grabbing ${index === safeIndex ? 'thumb-card-active' : ''} ${isDragging ? 'opacity-40' : ''}`}
+                      onClick={(event) => {
+                        handleSelectSlideFromThumbnail(index);
+                        const target =
+                          event.currentTarget.nextElementSibling ??
+                          event.currentTarget;
+                        target.scrollIntoView({
+                          block: 'nearest',
+                          behavior: 'smooth',
+                        });
+                      }}
+                      onDragStart={(event) => {
+                        setDraggedThumbIndex(index);
+                        event.dataTransfer.effectAllowed = 'move';
+                        event.dataTransfer.setData(
+                          'application/x-deckflow-thumb',
+                          String(index),
+                        );
+                      }}
+                      onDragEnd={() => {
+                        setDraggedThumbIndex(null);
+                        setThumbDropIndicator(null);
+                      }}
+                      onDragOver={(event) => {
+                        if (draggedThumbIndex === null) {
+                          return;
+                        }
+                        event.preventDefault();
+                        event.dataTransfer.dropEffect = 'move';
+                        const rect =
+                          event.currentTarget.getBoundingClientRect();
+                        const position =
+                          event.clientY < rect.top + rect.height / 2
+                            ? 'before'
+                            : 'after';
+                        setThumbDropIndicator({ index, position });
+                      }}
+                      onDragLeave={(event) => {
+                        // 只有在離開到非子節點時才清除指示器
+                        if (
+                          !event.currentTarget.contains(
+                            event.relatedTarget as Node | null,
+                          )
+                        ) {
+                          setThumbDropIndicator((prev) =>
+                            prev?.index === index ? null : prev,
+                          );
+                        }
+                      }}
+                      onDrop={(event) => {
+                        if (draggedThumbIndex === null) {
+                          return;
+                        }
+                        event.preventDefault();
+                        const rect =
+                          event.currentTarget.getBoundingClientRect();
+                        const insertBefore =
+                          event.clientY < rect.top + rect.height / 2;
+                        const targetIndex = insertBefore ? index : index + 1;
+                        handleReorderSlides(draggedThumbIndex, targetIndex);
+                        setDraggedThumbIndex(null);
+                        setThumbDropIndicator(null);
+                      }}
+                    >
+                      <p className="mb-1 text-xs font-semibold text-[var(--color-primary)]">
+                        #{index + 1}
+                      </p>
+                      <p className="thumb-title text-left text-sm font-semibold text-[var(--color-text)]">
+                        {slide.title}
+                      </p>
+                    </button>
+                    {showIndicatorAfter && (
+                      <div className="pointer-events-none absolute right-1 -bottom-1 left-1 z-10 h-0.5 rounded-full bg-[var(--color-primary)]" />
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </section>
         </main>
@@ -1518,6 +1726,8 @@ export function DeckStudio() {
                 layout={activeSlide?.layout}
                 background={activeSlide?.background}
                 ratio={activeSlide?.ratio}
+                tableZebra={activeSlide?.tableZebra}
+                tableBordered={activeSlide?.tableBordered}
               />
             </div>
           </article>
@@ -1591,6 +1801,8 @@ export function DeckStudio() {
                   layout={activeSlide?.layout}
                   background={activeSlide?.background}
                   ratio={activeSlide?.ratio}
+                  tableZebra={activeSlide?.tableZebra}
+                  tableBordered={activeSlide?.tableBordered}
                 />
               </div>
             </article>
@@ -1672,6 +1884,8 @@ export function DeckStudio() {
                       layout={nextSlide.layout}
                       background={nextSlide.background}
                       ratio={nextSlide.ratio}
+                      tableZebra={nextSlide.tableZebra}
+                      tableBordered={nextSlide.tableBordered}
                     />
                   </div>
                 ) : (

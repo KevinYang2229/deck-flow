@@ -1,7 +1,25 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { PresentationButton } from "@/components/PresentationButton";
+import {
+  PresentationTable,
+  PresentationTableBody,
+  PresentationTableCell,
+  PresentationTableHead,
+  PresentationTableHeaderCell,
+  PresentationTableRow,
+} from "@/components/PresentationTable";
 import type { SlideLayout, SlideRatio } from "@/lib/deck";
+
+/** ReactMarkdown 元件覆寫設定：把表格相關標籤接到簡報元件 */
+const markdownComponents = {
+  table: PresentationTable,
+  thead: PresentationTableHead,
+  tbody: PresentationTableBody,
+  tr: PresentationTableRow,
+  th: PresentationTableHeaderCell,
+  td: PresentationTableCell,
+};
 
 interface SlideMarkdownProps {
   /** 需要渲染的 Markdown */
@@ -16,6 +34,10 @@ interface SlideMarkdownProps {
   background?: string;
   /** 左右欄比例（百分比） */
   ratio?: SlideRatio;
+  /** 是否套用表格斑馬紋 */
+  tableZebra?: boolean;
+  /** 表格是否顯示完整框線 */
+  tableBordered?: boolean;
 }
 
 interface TwoColsParts {
@@ -170,7 +192,11 @@ function MarkdownBlock({ content }: { content: string }) {
         }
 
         return (
-          <ReactMarkdown key={`markdown-${index}`} remarkPlugins={[remarkGfm]}>
+          <ReactMarkdown
+            key={`markdown-${index}`}
+            remarkPlugins={[remarkGfm]}
+            components={markdownComponents}
+          >
             {segment.content}
           </ReactMarkdown>
         );
@@ -190,12 +216,16 @@ export function SlideMarkdown({
   layout = "default",
   background,
   ratio,
+  tableZebra = false,
+  tableBordered = false,
 }: SlideMarkdownProps) {
   const className = [
     "slide-markdown",
     compact ? "slide-markdown-compact" : "",
     alignHorizontal === "center" ? "slide-markdown-align-center" : "",
     alignHorizontal === "right" ? "slide-markdown-align-right" : "",
+    tableZebra ? "slide-markdown-zebra" : "",
+    tableBordered ? "slide-markdown-table-bordered" : "",
     `slide-layout-${layout}`,
   ]
     .filter(Boolean)

@@ -48,6 +48,10 @@ export interface DeckSlide {
   layout: SlideLayout;
   /** 左右欄比例 */
   ratio?: SlideRatio;
+  /** 是否套用表格斑馬紋 */
+  tableZebra?: boolean;
+  /** 表格是否顯示完整框線 */
+  tableBordered?: boolean;
 }
 
 /**
@@ -119,7 +123,7 @@ export function parseDeckMarkdown(markdown: string): DeckSlide[] {
     const parts = chunk.split(/\n:::\s*notes\s*\n/i);
     const rawContent = parts[0]?.trim() ?? "";
     const notes = parts[1]?.trim() ?? "";
-    const { content, background, alignHorizontal, alignVertical, layout, ratio } = extractSlideDirectives(
+    const { content, background, alignHorizontal, alignVertical, layout, ratio, tableZebra, tableBordered } = extractSlideDirectives(
       rawContent,
       index === 0 ? "cover" : "default",
     );
@@ -134,6 +138,8 @@ export function parseDeckMarkdown(markdown: string): DeckSlide[] {
       alignVertical,
       layout,
       ratio,
+      tableZebra,
+      tableBordered,
     };
   });
 }
@@ -152,6 +158,8 @@ function extractSlideDirectives(content: string, defaultLayout: SlideLayout): {
   alignVertical: "top" | "middle" | "bottom";
   layout: SlideLayout;
   ratio?: SlideRatio;
+  tableZebra?: boolean;
+  tableBordered?: boolean;
 } {
   const lines = content.split("\n");
   let background: string | undefined;
@@ -159,6 +167,8 @@ function extractSlideDirectives(content: string, defaultLayout: SlideLayout): {
   let alignVertical: "top" | "middle" | "bottom" = "middle";
   let layout: SlideLayout = defaultLayout;
   let ratio: SlideRatio | undefined;
+  let tableZebra: boolean | undefined;
+  let tableBordered: boolean | undefined;
 
   while (true) {
     const firstMeaningfulIndex = lines.findIndex((line) => line.trim().length > 0);
@@ -205,10 +215,24 @@ function extractSlideDirectives(content: string, defaultLayout: SlideLayout): {
       continue;
     }
 
+    const zebraMatch = firstLine.match(/^:::\s*zebra\s*$/i);
+    if (zebraMatch) {
+      tableZebra = true;
+      lines.splice(firstMeaningfulIndex, 1);
+      continue;
+    }
+
+    const borderMatch = firstLine.match(/^:::\s*(?:table-border|bordered)\s*$/i);
+    if (borderMatch) {
+      tableBordered = true;
+      lines.splice(firstMeaningfulIndex, 1);
+      continue;
+    }
+
     break;
   }
 
-  return { content: lines.join("\n").trim(), background, alignHorizontal, alignVertical, layout, ratio };
+  return { content: lines.join("\n").trim(), background, alignHorizontal, alignVertical, layout, ratio, tableZebra, tableBordered };
 }
 
 /**
