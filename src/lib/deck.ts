@@ -10,7 +10,11 @@ export type SlideLayout =
   | "fact"
   | "end"
   | "full"
+  | "title-content"
+  | "three-cols"
+  | "cards"
   | "image"
+  | "image-top"
   | "image-left"
   | "image-right"
   | "two-cols"
@@ -152,7 +156,7 @@ function extractSlideDirectives(content: string, defaultLayout: SlideLayout): {
   const lines = content.split("\n");
   let background: string | undefined;
   let alignHorizontal: "left" | "center" | "right" = "left";
-  let alignVertical: "top" | "middle" | "bottom" = "top";
+  let alignVertical: "top" | "middle" | "bottom" = "middle";
   let layout: SlideLayout = defaultLayout;
   let ratio: SlideRatio | undefined;
 
@@ -181,7 +185,7 @@ function extractSlideDirectives(content: string, defaultLayout: SlideLayout): {
     }
 
     const layoutMatch = firstLine.match(
-      /^:::\s*layout\s+(default|cover|center|intro|quote|section|statement|fact|end|full|image|image-left|image-right|two-cols|two-cols-header)$/i,
+      /^:::\s*layout\s+(default|cover|center|intro|quote|section|statement|fact|end|full|title-content|three-cols|cards|image|image-top|image-left|image-right|two-cols|two-cols-header)$/i,
     );
     if (layoutMatch) {
       layout = layoutMatch[1]!.toLowerCase() as SlideLayout;

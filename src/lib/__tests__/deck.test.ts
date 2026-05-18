@@ -35,6 +35,18 @@ describe("deck parser", () => {
     expect(result[0]?.layout).toBe("two-cols");
   });
 
+  it("應可解析通用 layout 指令", () => {
+    const result = parseDeckMarkdown(
+      ":::layout title-content\n# A\n---\n:::layout three-cols\n# B\n---\n:::layout cards\n# C\n---\n:::layout image-top\n# D",
+    );
+    expect(result.map((slide) => slide.layout)).toEqual([
+      "title-content",
+      "three-cols",
+      "cards",
+      "image-top",
+    ]);
+  });
+
   it("應可解析左右比例指令", () => {
     const result = parseDeckMarkdown(":::ratio 35:65\n:::layout image-right\n# Demo");
     expect(result[0]?.ratio?.left).toBeCloseTo(35);

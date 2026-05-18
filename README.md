@@ -57,9 +57,19 @@ npm run e2e:ui         # Playwright UI mode
 
 ## Markdown 語法約定
 
+預設內容位於 `src/content/slides.md`。每張投影片都是一段 Markdown，並可在每頁開頭加入 DeckFlow 指令控制版型、背景、對齊與比例。
+
 ### 投影片分隔
 
-使用 `---` 分隔投影片。
+使用 `---` 分隔投影片：
+
+```md
+# 第一頁
+
+---
+
+# 第二頁
+```
 
 ### 講者備註
 
@@ -73,49 +83,226 @@ npm run e2e:ui         # Playwright UI mode
 
 ### 頁面指令（放在每頁開頭）
 
-- `:::bg <url>` 或 `:::background <url>`：背景圖
-- `:::align <left|center|right> <top|middle|bottom>`：文字對齊
-- `:::layout <layout-name>`：版型
-- `:::ratio 35:65`：左右比例（給雙欄 / 圖文版型）
+頁面指令必須放在該頁最上方，可以多個並用：
+
+```md
+:::layout image-right
+:::ratio 45:55
+:::align left middle
+:::bg https://example.com/image.jpg
+
+## Slide Title
+
+- 重點一
+- 重點二
+```
+
+可用指令：
+
+- `:::layout <layout-name>`：指定投影片版型
+- `:::bg <url>` 或 `:::background <url>`：設定背景圖；圖文版型會用作圖片區塊
+- `:::align <left|center|right> <top|middle|bottom>`：設定水平與垂直對齊
+- `:::ratio 35:65`：設定左右比例，會正規化為百分比
+- `:::image-ratio 35:65` 或 `:::imageRatio 35:65`：`ratio` 的別名
+
+對齊範例：
+
+```md
+:::align left top
+:::align left middle
+:::align left bottom
+:::align center middle
+:::align right middle
+```
+
+未指定時：
+
+- 第一頁預設為 `cover`
+- 其他頁預設為 `default`
+- 水平對齊預設為 `left`
+- 垂直對齊預設為 `middle`
+
+### Layout 清單
 
 支援版型：
 
-- `default`
-- `cover`
-- `center`
-- `intro`
-- `quote`
-- `section`
-- `statement`
-- `fact`
-- `end`
-- `full`
-- `image`
-- `image-left`
-- `image-right`
-- `two-cols`
-- `two-cols-header`
+- `default`：一般內容頁
+- `cover`：封面頁
+- `center`：置中內容頁
+- `intro`：開場頁
+- `quote`：大引言頁
+- `section`：章節分隔頁
+- `statement`：一句重點頁
+- `fact`：數字 / 關鍵事實頁
+- `end`：結尾頁
+- `full`：滿版內容頁
+- `title-content`：大標題 + 內容說明
+- `two-cols`：左右兩欄
+- `two-cols-header`：上方標題 + 下方兩欄
+- `three-cols`：三欄內容
+- `cards`：將清單項目排成卡片
+- `image-left`：圖片左、內容右
+- `image-right`：內容左、圖片右
+- `image-top`：圖片上、內容下
+- `image`：保留型圖片版型；目前建議優先使用 `image-left`、`image-right`、`image-top`
 
-### 雙欄分隔語法
+### 常用 Layout 範例
 
-`two-cols`：
+#### `title-content`
+
+```md
+:::layout title-content
+:::align left middle
+
+# 摘要
+
+這裡放一段比較完整的說明文字，適合 executive summary、章節開場或決策摘要。
+
+- 重點一
+- 重點二
+- 重點三
+```
+
+#### `two-cols`
+
+使用 `::right::` 分隔左右欄：
 
 ```md
 :::layout two-cols
-左欄內容
+:::ratio 45:55
+
+## 左欄
+
+- 問題
+- 現況
+- 限制
+
 ::right::
-右欄內容
+
+## 右欄
+
+- 解法
+- 價值
+- 下一步
 ```
 
-`two-cols-header`：
+#### `two-cols-header`
+
+使用 `::left::` 與 `::right::` 分隔頁首、左欄、右欄：
 
 ```md
 :::layout two-cols-header
-頁首內容
+
+## 頁首內容
+
 ::left::
-左欄內容
+
+### 左欄
+
+- 內容 A
+
 ::right::
-右欄內容
+
+### 右欄
+
+- 內容 B
+```
+
+#### `three-cols`
+
+使用 `::middle::` 與 `::right::` 分隔三欄：
+
+```md
+:::layout three-cols
+
+### 01 起草
+
+- 建立故事線
+
+::middle::
+
+### 02 審查
+
+- 檢查內容差異
+
+::right::
+
+### 03 發表
+
+- 播放與講者模式
+```
+
+#### `cards`
+
+清單項目會自動排成卡片：
+
+```md
+:::layout cards
+
+## 核心能力
+
+- Markdown 簡報撰寫
+- 版型指令
+- 背景圖支援
+- 講者模式
+```
+
+#### `image-left` / `image-right`
+
+使用 `:::bg` 設定圖片，`:::ratio` 控制圖文比例：
+
+```md
+:::layout image-right
+:::ratio 48:52
+:::align left middle
+:::bg https://example.com/product.jpg
+
+## 產品願景
+
+- 內容放左側
+- 圖片放右側
+- 適合產品介紹與案例頁
+```
+
+```md
+:::layout image-left
+:::ratio 46:54
+:::bg https://example.com/team.jpg
+
+## 使用情境
+
+圖片放左側，內容放右側。
+```
+
+#### `image-top`
+
+```md
+:::layout image-top
+:::bg https://example.com/workspace.jpg
+
+## 場景頁
+
+上方放情境圖，下方保留完整文字區。
+```
+
+### 完整頁面範例
+
+```md
+:::layout image-right
+:::ratio 48:52
+:::align left middle
+:::bg https://images.unsplash.com/photo-1515879218367-8466d910aaa4?auto=format&fit=crop&w=1800&q=80
+
+## 產品願景
+
+DeckFlow 將一份 Markdown 檔案轉換成完整、穩定、可上台播放的簡報體驗。
+
+- 作者專注在內容結構
+- Runtime 負責視覺一致性
+- 團隊能版本化、審查與重用投影片
+
+:::notes
+這裡放講者備註，只會在講者模式顯示。
 ```
 
 ## 路由
@@ -157,4 +344,4 @@ src/
 - `src/lib/__tests__/deck.test.ts`（解析器邏輯）
 - `src/components/__tests__/DeckStudio.test.tsx`（模式切換）
 
-在 `2026-04-23` 本地執行 `npm run test`：**2 個測試檔、8 個測試皆通過**。
+目前本地執行 `npm run test`：**2 個測試檔、9 個測試皆通過**。

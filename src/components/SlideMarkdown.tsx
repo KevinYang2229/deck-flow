@@ -24,6 +24,15 @@ interface TwoColsParts {
   right: string;
 }
 
+interface ThreeColsParts {
+  /** 左欄內容 */
+  left: string;
+  /** 中欄內容 */
+  middle: string;
+  /** 右欄內容 */
+  right: string;
+}
+
 interface TwoColsHeaderParts {
   /** 頁首內容 */
   header: string;
@@ -42,6 +51,20 @@ function parseTwoCols(markdown: string): TwoColsParts {
   const left = (leftRaw ?? "").replace(/\n::left::\n/gi, "\n").trim();
   const right = (rightRaw ?? "").trim();
   return { left, right };
+}
+
+/**
+ * 解析 three-cols 內容
+ * 使用 `::middle::` 與 `::right::` 分割三欄
+ */
+function parseThreeCols(markdown: string): ThreeColsParts {
+  const [leftRaw, restRaw] = markdown.split(/\n::middle::\n/i);
+  const [middleRaw, rightRaw] = (restRaw ?? "").split(/\n::right::\n/i);
+  return {
+    left: (leftRaw ?? "").replace(/\n::left::\n/gi, "\n").trim(),
+    middle: (middleRaw ?? "").trim(),
+    right: (rightRaw ?? "").trim(),
+  };
 }
 
 /**
@@ -107,6 +130,25 @@ export function SlideMarkdown({
     );
   }
 
+  if (layout === "three-cols") {
+    const { left, middle, right } = parseThreeCols(markdown);
+    return (
+      <div className={className}>
+        <div className="slide-three-cols">
+          <div className="slide-two-cols-pane">
+            <MarkdownBlock content={left} />
+          </div>
+          <div className="slide-two-cols-pane">
+            <MarkdownBlock content={middle} />
+          </div>
+          <div className="slide-two-cols-pane">
+            <MarkdownBlock content={right} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (layout === "two-cols-header") {
     const { header, left, right } = parseTwoColsHeader(markdown);
     return (
@@ -125,6 +167,19 @@ export function SlideMarkdown({
             <div className="slide-two-cols-pane">
               <MarkdownBlock content={right} />
             </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (layout === "image-top") {
+    return (
+      <div className={className}>
+        <div className="slide-layout-image-shell slide-layout-image-shell-top">
+          <div className="slide-layout-image-pane" style={{ backgroundImage: background ? `url("${background}")` : undefined }} />
+          <div className="slide-layout-image-content">
+            <MarkdownBlock content={markdown} />
           </div>
         </div>
       </div>

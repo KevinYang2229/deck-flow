@@ -4,6 +4,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type DragEvent,
 } from 'react';
 import { Link } from '@tanstack/react-router';
 import { SlideMarkdown } from '@/components/SlideMarkdown';
@@ -34,17 +35,134 @@ function formatDuration(totalSeconds: number): string {
 }
 
 /**
+ * 判斷版型是否使用獨立圖片區塊
+ * 用於停用背景遮罩並移除投影片內距
+ */
+function isImagePanelLayout(layout: SlideLayout | undefined): boolean {
+  return (
+    layout === 'image-left' ||
+    layout === 'image-right' ||
+    layout === 'image-top'
+  );
+}
+
+interface LayoutTemplate {
+  /** 顯示名稱 */
+  label: string;
+  /** 插入編輯器的 Markdown 範本 */
+  markdown: string;
+}
+
+interface MarkdownTool extends LayoutTemplate {
+  /** 工具分類 */
+  group: '版型' | '指令';
+}
+
+type VerticalAlignment = 'top' | 'middle' | 'bottom';
+
+interface VerticalAlignmentOption {
+  /** 顯示名稱 */
+  label: string;
+  /** 垂直對齊值 */
+  value: VerticalAlignment;
+}
+
+const markdownTools: MarkdownTool[] = [
+  {
+    label: '標題內容',
+    group: '版型',
+    markdown: ':::layout title-content\n\n## 標題\n\n補充說明文字\n',
+  },
+  {
+    label: '三欄',
+    group: '版型',
+    markdown:
+      ':::layout three-cols\n\n### 左欄\n\n- 重點一\n\n::middle::\n\n### 中欄\n\n- 重點二\n\n::right::\n\n### 右欄\n\n- 重點三\n',
+  },
+  {
+    label: '卡片',
+    group: '版型',
+    markdown:
+      ':::layout cards\n\n## 卡片清單\n\n- 第一個項目\n- 第二個項目\n- 第三個項目\n',
+  },
+  {
+    label: '上圖下文',
+    group: '版型',
+    markdown:
+      ':::layout image-top\n:::bg https://images.unsplash.com/photo-1515879218367-8466d910aaa4?auto=format&fit=crop&w=1400&q=80\n\n## 上圖下文\n\n這裡放主要內容。\n',
+  },
+  {
+    label: '背景圖',
+    group: '指令',
+    markdown: ':::bg https://example.com/image.jpg\n',
+  },
+  {
+    label: '比例',
+    group: '指令',
+    markdown: ':::ratio 45:55\n',
+  },
+  {
+    label: '講者備註',
+    group: '指令',
+    markdown: '\n:::notes\n這裡放講者備註。\n',
+  },
+];
+
+const verticalAlignmentOptions: VerticalAlignmentOption[] = [
+  { label: '靠上', value: 'top' },
+  { label: '置中', value: 'middle' },
+  { label: '靠下', value: 'bottom' },
+];
+
+/**
+ * 取得指定投影片第一個標題在 Markdown 原文中的位置
+ * 找不到標題時退回該投影片起始位置
+ */
+function getSlideMarkdownOffset(markdown: string, slideIndex: number): number {
+  const separatorPattern = /\n-{3,}\n/g;
+  let slideStart = 0;
+  let slideEnd = markdown.length;
+  let currentIndex = 0;
+  let match = separatorPattern.exec(markdown);
+
+  while (match) {
+    if (currentIndex === slideIndex) {
+      slideEnd = match.index;
+      break;
+    }
+    currentIndex += 1;
+    slideStart = match.index + match[0].length;
+    match = separatorPattern.exec(markdown);
+  }
+
+  const slideMarkdown = markdown.slice(slideStart, slideEnd);
+  const headingMatch = /^#{1,6}\s+/m.exec(slideMarkdown);
+  if (!headingMatch) {
+    return slideStart;
+  }
+
+  return slideStart + headingMatch.index;
+}
+
+/**
+ * 取得指定位置所在行的結尾位置
+ * 用於定位後選取整行標題，讓目前游標位置更明顯
+ */
+function getLineEndOffset(markdown: string, offset: number): number {
+  const lineEnd = markdown.indexOf('\n', offset);
+  return lineEnd === -1 ? markdown.length : lineEnd;
+}
+
+/**
  * 產生投影片背景樣式
  * 有背景圖時套用遮罩以維持文字可讀性
  */
-function createSlideStyle(
-  options: {
-    layout: SlideLayout | undefined;
-    background: string | undefined;
-    alignHorizontal: 'left' | 'center' | 'right' | undefined;
-    alignVertical: 'top' | 'middle' | 'bottom' | undefined;
-  },
-): CSSProperties {
+function createSlideStyle(options: {
+  layout: SlideLayout | undefined;
+  background: string | undefined;
+  alignHorizontal: 'left' | 'center' | 'right' | undefined;
+  alignVertical: 'top' | 'middle' | 'bottom' | undefined;
+}): CSSProperties {
   const { layout, background, alignHorizontal, alignVertical } = options;
   const justifyContent =
     alignVertical === 'middle'
@@ -52,19 +170,22 @@ function createSlideStyle(
       : alignVertical === 'bottom'
         ? 'flex-end'
         : 'flex-start';
-  const textAlign =
-    alignHorizontal === 'center'
-      ? 'center'
-      : alignHorizontal === 'right'
-        ? 'right'
-        : 'left';
+  const textAlign = alignHorizontal === 'right' ? 'right' : 'left';
 
   const style: CSSProperties = {
     justifyContent,
     textAlign,
   };
 
-  if (!background || layout === 'image-left' || layout === 'image-right') {
+  if (
+    alignVertical === 'middle' &&
+    !isImagePanelLayout(layout) &&
+    layout !== 'full'
+  ) {
+    style.paddingBottom = 'clamp(1rem, 6svh, 4rem)';
+  }
+
+  if (!background || isImagePanelLayout(layout)) {
     return style;
   }
 
@@ -82,14 +203,18 @@ function createSlideContentStyle(
   layout: SlideLayout | undefined,
   alignHorizontal: 'left' | 'center' | 'right' | undefined,
 ): CSSProperties | undefined {
-  if (layout === 'full' || layout === 'cover') {
+  if (layout === 'full') {
     return { width: '100%' };
   }
-  if (layout === 'image-left' || layout === 'image-right') {
+  if (isImagePanelLayout(layout)) {
     return { width: '100%', maxWidth: '100%' };
   }
-  if (alignHorizontal === 'center') {
-    return { maxWidth: '56rem', marginInline: 'auto', width: '100%' };
+  if (
+    alignHorizontal === 'center' ||
+    alignHorizontal === 'left' ||
+    alignHorizontal === undefined
+  ) {
+    return { maxWidth: '76rem', marginInline: 'auto', width: '100%' };
   }
   if (alignHorizontal === 'right') {
     return { marginLeft: 'auto', width: '100%' };
@@ -125,6 +250,13 @@ export function DeckStudio() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [isTimerRunning, setTimerRunning] = useState(false);
   const [isModeInitialized, setIsModeInitialized] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isEditorDropActive, setIsEditorDropActive] = useState(false);
+  const [editorDropLineTop, setEditorDropLineTop] = useState<number | null>(
+    null,
+  );
+  const presentRootRef = useRef<HTMLDivElement | null>(null);
+  const editorRef = useRef<HTMLTextAreaElement | null>(null);
   const [currentFileHandle, setCurrentFileHandle] =
     useState<FileHandleLike | null>(null);
   const [currentFileName, setCurrentFileName] = useState(
@@ -260,6 +392,9 @@ export function DeckStudio() {
       }
 
       if (event.key === 'Escape') {
+        if (document.fullscreenElement) {
+          return;
+        }
         setMode('editor');
       }
     }
@@ -300,11 +435,72 @@ export function DeckStudio() {
     setActiveIndex(clamp(safeIndex + 1, 0, Math.max(slides.length - 1, 0)));
   }
 
+  /** 從縮圖切換投影片，並同步捲動 Markdown 編輯器到對應頁面 */
+  function handleSelectSlideFromThumbnail(index: number): void {
+    setActiveIndex(index);
+
+    const editor = editorRef.current;
+    if (!editor) {
+      return;
+    }
+
+    const offset = getSlideMarkdownOffset(markdown, index);
+    const lineEndOffset = getLineEndOffset(markdown, offset);
+    window.requestAnimationFrame(() => {
+      const style = window.getComputedStyle(editor);
+      const lineHeight = Number.parseFloat(style.lineHeight) || 24;
+      const lineIndex = markdown.slice(0, offset).split('\n').length - 1;
+      const targetTop = Math.max(0, lineIndex * lineHeight);
+
+      editor.focus({ preventScroll: true });
+      editor.setSelectionRange(offset, lineEndOffset);
+      editor.scrollTo({ top: targetTop, behavior: 'smooth' });
+    });
+  }
+
   /** 重置計時器 */
   function handleResetTimer(): void {
     setElapsedSeconds(0);
     setTimerRunning(false);
   }
+
+  /** 切換全螢幕（針對播放模式容器） */
+  async function toggleFullscreen(): Promise<void> {
+    const target = presentRootRef.current ?? document.documentElement;
+    if (document.fullscreenElement) {
+      await document.exitFullscreen();
+    } else {
+      await target.requestFullscreen();
+    }
+  }
+
+  /** 監聽全螢幕狀態變化，同步按鈕顯示 */
+  useEffect(() => {
+    function handleChange(): void {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+    }
+    document.addEventListener('fullscreenchange', handleChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleChange);
+    };
+  }, []);
+
+  /** F 鍵在播放模式切換全螢幕 */
+  useEffect(() => {
+    if (mode !== 'present') {
+      return;
+    }
+    function onKey(event: KeyboardEvent): void {
+      if (event.key === 'f' || event.key === 'F') {
+        event.preventDefault();
+        void toggleFullscreen();
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [mode]);
 
   /** 開啟指定模式新視窗 */
   function openModeWindow(nextMode: DeckMode): void {
@@ -367,13 +563,122 @@ export function DeckStudio() {
     setFileStatus('已還原為專案檔案 src/content/slides.md');
   }
 
+  /** 將版型範本插入游標位置，方便快速建立投影片 */
+  function handleInsertLayoutTemplate(template: string): void {
+    const editor = editorRef.current;
+    const separator = markdown.trim().length > 0 ? '\n\n---\n\n' : '';
+    if (!editor) {
+      setMarkdown(`${markdown}${separator}${template}`);
+      return;
+    }
+
+    const selectionStart = editor.selectionStart;
+    const selectionEnd = editor.selectionEnd;
+    const insertText = `${separator}${template}`;
+    const nextMarkdown =
+      markdown.slice(0, selectionStart) +
+      insertText +
+      markdown.slice(selectionEnd);
+    setMarkdown(nextMarkdown);
+
+    window.requestAnimationFrame(() => {
+      const cursorPosition = selectionStart + insertText.length;
+      editor.focus();
+      editor.setSelectionRange(cursorPosition, cursorPosition);
+    });
+  }
+
+  /** 在 Markdown 編輯器目前游標位置插入片段 */
+  function insertMarkdownAtCursor(snippet: string): void {
+    const editor = editorRef.current;
+    if (!editor) {
+      setMarkdown(`${markdown}${snippet}`);
+      return;
+    }
+
+    const selectionStart = editor.selectionStart;
+    const selectionEnd = editor.selectionEnd;
+    const nextMarkdown =
+      markdown.slice(0, selectionStart) +
+      snippet +
+      markdown.slice(selectionEnd);
+    setMarkdown(nextMarkdown);
+
+    window.requestAnimationFrame(() => {
+      const cursorPosition = selectionStart + snippet.length;
+      editor.focus();
+      editor.setSelectionRange(cursorPosition, cursorPosition);
+    });
+  }
+
+  /** 拖曳功能列項目時，保存要插入的 Markdown */
+  function handleToolDragStart(
+    event: DragEvent<HTMLButtonElement>,
+    tool: MarkdownTool,
+  ): void {
+    const dropText =
+      tool.group === '版型'
+        ? `\n\n---\n\n${tool.markdown.trim()}\n\n---\n\n`
+        : tool.markdown;
+    event.dataTransfer.effectAllowed = 'copy';
+    event.dataTransfer.setData('text/plain', dropText);
+    event.dataTransfer.setData('application/x-deckflow-markdown', dropText);
+  }
+
+  /** 拖曳工具列片段進入編輯區時提供高亮提示 */
+  function handleEditorDragOver(event: DragEvent<HTMLTextAreaElement>): void {
+    if (event.dataTransfer.types.includes('application/x-deckflow-markdown')) {
+      event.dataTransfer.dropEffect = 'copy';
+      setIsEditorDropActive(true);
+      const textarea = event.currentTarget;
+      const rect = textarea.getBoundingClientRect();
+      const style = window.getComputedStyle(textarea);
+      const lineHeight = Number.parseFloat(style.lineHeight) || 24;
+      const paddingTop = Number.parseFloat(style.paddingTop) || 0;
+      const scrollAdjustedY =
+        event.clientY - rect.top + textarea.scrollTop - paddingTop;
+      const lineIndex = Math.max(0, Math.floor(scrollAdjustedY / lineHeight));
+      const lineTop = lineIndex * lineHeight + paddingTop - textarea.scrollTop;
+      setEditorDropLineTop(Math.max(paddingTop, lineTop));
+    }
+  }
+
+  /** 拖放完成後交由 textarea 原生行為插入到指定位置 */
+  function handleEditorDrop(): void {
+    setIsEditorDropActive(false);
+    setEditorDropLineTop(null);
+  }
+
+  /** 更新目前投影片的垂直對齊指令 */
+  function handleUpdateVerticalAlignment(
+    nextVertical: VerticalAlignment,
+  ): void {
+    const chunks = markdown.split(/\n-{3,}\n/g);
+    const currentChunk = chunks[safeIndex];
+    if (!currentChunk) {
+      return;
+    }
+
+    const nextHorizontal = activeSlide?.alignHorizontal ?? 'left';
+    const cleanedChunk = currentChunk
+      .replace(
+        /^\s*:::\s*align\s+(left|center|right)\s+(top|middle|bottom)\s*$/gim,
+        '',
+      )
+      .trimStart();
+
+    chunks[safeIndex] =
+      `:::align ${nextHorizontal} ${nextVertical}\n${cleanedChunk}`.trimEnd();
+    setMarkdown(chunks.join('\n\n---\n\n'));
+  }
+
   const progressPercent =
     slides.length > 1 ? (safeIndex / (slides.length - 1)) * 100 : 0;
 
   return (
-    <div className="hero-glow min-h-screen">
-      <header className="sticky top-0 z-20 border-b border-[var(--color-border)] bg-[color:color-mix(in_srgb,var(--color-bg)_88%,transparent)] backdrop-blur-xl">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
+    <div className="hero-glow flex h-[100svh] flex-col overflow-hidden">
+      <header className="z-20 shrink-0 border-b border-[var(--color-border)] bg-[color:color-mix(in_srgb,var(--color-bg)_88%,transparent)] backdrop-blur-xl">
+        <div className="mx-auto flex max-w-[96rem] flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
             <div className="title-font rounded-lg bg-[var(--color-primary)] px-3 py-1 text-xs font-bold tracking-widest text-white">
               DECKFLOW
@@ -421,39 +726,104 @@ export function DeckStudio() {
       </header>
 
       {mode === 'editor' && (
-        <main className="mx-auto grid max-w-7xl gap-4 px-4 py-5 sm:px-6 lg:grid-cols-[1fr_1.2fr_280px] lg:px-8">
-          <section className="glass-card rounded-2xl p-4">
-            <div className="mb-3 flex flex-wrap items-center justify-between">
+        <main className="app-scrollbar mx-auto grid min-h-0 w-full max-w-[100rem] flex-1 gap-4 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8 xl:grid-cols-[220px_1fr_1.18fr_260px] xl:overflow-hidden">
+          <aside className="glass-card flex min-h-[18rem] flex-col overflow-hidden rounded-2xl p-3 xl:min-h-0">
+            <div className="mb-3 shrink-0">
+              <h2 className="title-font text-lg font-bold">功能清單</h2>
+              <p className="mt-1 text-xs leading-5 text-[var(--color-text-muted)]">
+                點擊使用，或拖曳到 Markdown 撰寫區。
+              </p>
+            </div>
+            <div className="app-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+              <div>
+                <p className="mb-2 text-xs font-semibold text-[var(--color-text-muted)]">
+                  垂直排列
+                </p>
+                <div className="grid gap-2">
+                  {verticalAlignmentOptions.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={`control-btn text-left ${activeSlide?.alignVertical === option.value ? 'control-btn-primary' : ''}`}
+                      onClick={() => {
+                        handleUpdateVerticalAlignment(option.value);
+                      }}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="mb-2 text-xs font-semibold text-[var(--color-text-muted)]">
+                  Markdown 工具
+                </p>
+                <div className="grid gap-2">
+                  {markdownTools.map((tool) => (
+                    <button
+                      key={`${tool.group}-${tool.label}`}
+                      type="button"
+                      draggable
+                      className="control-btn cursor-grab text-left active:cursor-grabbing"
+                      title={`點擊新增，或拖曳「${tool.label}」到撰寫區`}
+                      onClick={() => {
+                        if (tool.group === '版型') {
+                          handleInsertLayoutTemplate(tool.markdown);
+                          return;
+                        }
+                        insertMarkdownAtCursor(tool.markdown);
+                      }}
+                      onDragEnd={() => {
+                        setIsEditorDropActive(false);
+                      }}
+                      onDragStart={(event) => {
+                        handleToolDragStart(event, tool);
+                      }}
+                    >
+                      <span className="block text-[0.68rem] font-bold text-[var(--color-text-muted)]">
+                        {tool.group}
+                      </span>
+                      {tool.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </aside>
+
+          <section className="glass-card flex min-h-[32rem] flex-col overflow-hidden rounded-2xl p-4 lg:min-h-0">
+            <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between">
               <h2 className="title-font text-lg font-bold">
                 {currentFileName}
               </h2>
               <span className="text-xs text-[var(--color-text-muted)]">
                 以 `---` 分頁，`:::notes` 備註，`:::bg URL` 背景圖，`:::align
                 center middle` 對齊，`:::layout cover` 版型，`:::ratio 35:65`
-                比例
+                比例；可用快捷插入通用版型
               </span>
             </div>
-            <div className="mb-3 flex flex-wrap gap-2">
+            <div className="mb-3 flex shrink-0 flex-wrap gap-2">
               <button
                 type="button"
                 className="control-btn"
                 onClick={handleOpenMarkdownFile}
               >
-                開啟 Markdown
+                開啟
               </button>
               <button
                 type="button"
                 className="control-btn"
                 onClick={handleSaveCurrentFile}
               >
-                儲存 Markdown
+                儲存
               </button>
               <button
                 type="button"
                 className="control-btn"
                 onClick={handleSaveAsFile}
               >
-                另存 Markdown
+                另存
               </button>
               <button
                 type="button"
@@ -463,25 +833,44 @@ export function DeckStudio() {
                 還原專案檔
               </button>
             </div>
-            <p className="mb-3 text-xs text-[var(--color-text-muted)]">
+            <p className="mb-3 shrink-0 text-xs text-[var(--color-text-muted)]">
               {fileStatus ||
                 '預設來源：src/content/slides.md（可直接在 IDE 修改）'}
             </p>
             <label htmlFor="deck-editor" className="sr-only">
               投影片 Markdown 編輯器
             </label>
-            <textarea
-              id="deck-editor"
-              className="h-[70svh] w-full resize-none rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] p-3 text-sm leading-6 ring-[var(--color-primary)] transition outline-none focus:ring-2"
-              value={markdown}
-              onChange={(event) => {
-                setMarkdown(event.target.value);
-              }}
-            />
+            <div className="relative min-h-[18rem] flex-1 lg:min-h-0">
+              <textarea
+                ref={editorRef}
+                id="deck-editor"
+                className={`app-scrollbar h-full min-h-[18rem] w-full resize-none rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] p-3 text-sm leading-6 caret-[var(--color-primary)] ring-[var(--color-primary)] transition outline-none selection:bg-[var(--color-primary)] selection:text-white focus:ring-2 lg:min-h-0 ${isEditorDropActive ? 'border-[var(--color-primary)] ring-2' : ''}`}
+                value={markdown}
+                onDragLeave={() => {
+                  setIsEditorDropActive(false);
+                  setEditorDropLineTop(null);
+                }}
+                onDragOver={handleEditorDragOver}
+                onDrop={handleEditorDrop}
+                onChange={(event) => {
+                  setMarkdown(event.target.value);
+                }}
+              />
+              {isEditorDropActive && editorDropLineTop !== null && (
+                <div
+                  className="pointer-events-none absolute right-3 left-3 z-10 h-0.5 rounded-full bg-[var(--color-primary)] shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-primary-soft)_80%,transparent)]"
+                  style={{ top: editorDropLineTop }}
+                >
+                  <span className="absolute -top-3 left-0 rounded bg-[var(--color-primary)] px-2 py-0.5 text-[0.68rem] font-bold text-white">
+                    插入到這一列
+                  </span>
+                </div>
+              )}
+            </div>
           </section>
 
-          <section className="glass-card rounded-2xl p-4">
-            <div className="mb-3 flex items-center justify-between gap-3">
+          <section className="glass-card flex min-h-[28rem] flex-col overflow-hidden rounded-2xl p-4 lg:min-h-0">
+            <div className="mb-3 flex shrink-0 items-center justify-between gap-3">
               <h2 className="title-font text-lg font-bold">
                 {activeSlide?.title ?? 'Untitled Slide'}
               </h2>
@@ -490,15 +879,17 @@ export function DeckStudio() {
               </p>
             </div>
             <article
-              className={`slide-frame min-h-[54svh] ${activeSlide?.layout === 'image-left' || activeSlide?.layout === 'image-right' ? 'slide-frame-image-layout' : ''}`}
-              style={createSlideStyle(
-                {
-                  layout: activeSlide?.layout,
-                  background: activeSlide?.background,
-                  alignHorizontal: activeSlide?.alignHorizontal,
-                  alignVertical: activeSlide?.alignVertical,
-                },
-              )}
+              className={`slide-frame min-h-0 flex-1 cursor-pointer overflow-hidden ${isImagePanelLayout(activeSlide?.layout) ? 'slide-frame-image-layout' : ''}`}
+              title="點擊後在 Markdown 編輯器定位到此頁標題"
+              onClick={() => {
+                handleSelectSlideFromThumbnail(safeIndex);
+              }}
+              style={createSlideStyle({
+                layout: activeSlide?.layout,
+                background: activeSlide?.background,
+                alignHorizontal: activeSlide?.alignHorizontal,
+                alignVertical: activeSlide?.alignVertical,
+              })}
             >
               <div
                 style={createSlideContentStyle(
@@ -515,7 +906,7 @@ export function DeckStudio() {
                 />
               </div>
             </article>
-            <div className="mt-3">
+            <div className="mt-3 shrink-0">
               <div className="h-1.5 rounded-full bg-[var(--color-primary-soft)]">
                 <div
                   className="h-1.5 rounded-full bg-[var(--color-primary)]"
@@ -572,16 +963,18 @@ export function DeckStudio() {
             </div>
           </section>
 
-          <section className="glass-card rounded-2xl p-3">
-            <h2 className="title-font mb-2 px-1 text-lg font-bold">縮圖導覽</h2>
-            <div className="max-h-[74svh] space-y-2 overflow-y-auto pr-1">
+          <section className="glass-card flex min-h-[22rem] flex-col overflow-hidden rounded-2xl p-3 lg:min-h-0">
+            <h2 className="title-font mb-2 shrink-0 px-1 text-lg font-bold">
+              縮圖導覽
+            </h2>
+            <div className="app-scrollbar min-h-0 flex-1 space-y-2 overflow-y-auto px-1 pt-1 pb-1">
               {slides.map((slide, index) => (
                 <button
                   key={slide.id}
                   type="button"
                   className={`thumb-card ${index === safeIndex ? 'thumb-card-active' : ''}`}
                   onClick={() => {
-                    setActiveIndex(index);
+                    handleSelectSlideFromThumbnail(index);
                   }}
                 >
                   <p className="mb-1 text-xs font-semibold text-[var(--color-primary)]">
@@ -598,17 +991,18 @@ export function DeckStudio() {
       )}
 
       {mode === 'present' && (
-        <main className="mx-auto flex min-h-[calc(100svh-58px)] max-w-7xl flex-col px-4 py-5 sm:px-6 lg:px-8">
+        <main
+          ref={presentRootRef}
+          className={`mx-auto flex min-h-0 flex-1 flex-col bg-[var(--color-bg)] ${isFullscreen ? 'h-screen w-screen max-w-none p-0' : 'w-full max-w-[96rem] px-4 py-5 sm:px-6 lg:px-8'}`}
+        >
           <article
-            className={`slide-frame mx-auto flex w-full max-w-5xl flex-1 ${activeSlide?.layout === 'image-left' || activeSlide?.layout === 'image-right' ? 'slide-frame-image-layout' : ''}`}
-            style={createSlideStyle(
-              {
-                layout: activeSlide?.layout,
-                background: activeSlide?.background,
-                alignHorizontal: activeSlide?.alignHorizontal,
-                alignVertical: activeSlide?.alignVertical,
-              },
-            )}
+            className={`slide-frame mx-auto flex w-full flex-1 ${isFullscreen ? 'slide-frame-fullscreen max-w-none' : 'max-w-[84rem]'} ${isImagePanelLayout(activeSlide?.layout) ? 'slide-frame-image-layout' : ''}`}
+            style={createSlideStyle({
+              layout: activeSlide?.layout,
+              background: activeSlide?.background,
+              alignHorizontal: activeSlide?.alignHorizontal,
+              alignVertical: activeSlide?.alignVertical,
+            })}
           >
             <div
               style={createSlideContentStyle(
@@ -625,52 +1019,62 @@ export function DeckStudio() {
               />
             </div>
           </article>
-          <footer className="mt-4">
-            <div className="mb-2 h-1.5 rounded-full bg-[var(--color-primary-soft)]">
-              <div
-                className="h-1.5 rounded-full bg-[var(--color-primary)]"
-                style={{ width: `${progressPercent}%` }}
-              />
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  className="control-btn"
-                  onClick={handlePrevSlide}
-                >
-                  上一張
-                </button>
-                <button
-                  type="button"
-                  className="control-btn control-btn-primary"
-                  onClick={handleNextSlide}
-                >
-                  下一張
-                </button>
+          {!isFullscreen && (
+            <footer className="mt-4">
+              <div className="mb-2 h-1.5 rounded-full bg-[var(--color-primary-soft)]">
+                <div
+                  className="h-1.5 rounded-full bg-[var(--color-primary)]"
+                  style={{ width: `${progressPercent}%` }}
+                />
               </div>
-              <p className="text-sm text-[var(--color-text-muted)]">
-                {safeIndex + 1} / {slides.length}
-              </p>
-            </div>
-          </footer>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className="control-btn"
+                    onClick={handlePrevSlide}
+                  >
+                    上一張
+                  </button>
+                  <button
+                    type="button"
+                    className="control-btn control-btn-primary"
+                    onClick={handleNextSlide}
+                  >
+                    下一張
+                  </button>
+                  <button
+                    type="button"
+                    className="control-btn"
+                    onClick={() => {
+                      void toggleFullscreen();
+                    }}
+                    title="快捷鍵 F"
+                  >
+                    {isFullscreen ? '離開全螢幕' : '全螢幕'}
+                  </button>
+                </div>
+                <p className="text-sm text-[var(--color-text-muted)]">
+                  {safeIndex + 1} / {slides.length}
+                </p>
+              </div>
+            </footer>
+          )}
         </main>
       )}
 
       {mode === 'presenter' && (
-        <main className="mx-auto grid max-w-7xl gap-4 px-4 py-5 sm:px-6 lg:grid-cols-[1.1fr_0.9fr] lg:px-8">
+        <main className="app-scrollbar mx-auto grid min-h-0 w-full max-w-[96rem] flex-1 gap-4 overflow-y-auto px-4 py-5 sm:px-6 lg:grid-cols-[1.1fr_0.9fr] lg:px-8">
           <section className="glass-card rounded-2xl p-4">
             <h2 className="title-font mb-3 text-lg font-bold">目前投影片</h2>
             <article
-              className={`slide-frame min-h-[42svh] ${activeSlide?.layout === 'image-left' || activeSlide?.layout === 'image-right' ? 'slide-frame-image-layout' : ''}`}
-              style={createSlideStyle(
-                {
-                  layout: activeSlide?.layout,
-                  background: activeSlide?.background,
-                  alignHorizontal: activeSlide?.alignHorizontal,
-                  alignVertical: activeSlide?.alignVertical,
-                },
-              )}
+              className={`slide-frame min-h-[42svh] ${isImagePanelLayout(activeSlide?.layout) ? 'slide-frame-image-layout' : ''}`}
+              style={createSlideStyle({
+                layout: activeSlide?.layout,
+                background: activeSlide?.background,
+                alignHorizontal: activeSlide?.alignHorizontal,
+                alignVertical: activeSlide?.alignVertical,
+              })}
             >
               <div
                 style={createSlideContentStyle(
@@ -710,15 +1114,13 @@ export function DeckStudio() {
             <article className="glass-card rounded-2xl p-4">
               <h2 className="title-font mb-3 text-lg font-bold">下一張預覽</h2>
               <div
-                className={`slide-frame min-h-52 ${nextSlide?.layout === 'image-left' || nextSlide?.layout === 'image-right' ? 'slide-frame-image-layout' : ''}`}
-                style={createSlideStyle(
-                  {
-                    layout: nextSlide?.layout,
-                    background: nextSlide?.background,
-                    alignHorizontal: nextSlide?.alignHorizontal,
-                    alignVertical: nextSlide?.alignVertical,
-                  },
-                )}
+                className={`slide-frame min-h-52 ${isImagePanelLayout(nextSlide?.layout) ? 'slide-frame-image-layout' : ''}`}
+                style={createSlideStyle({
+                  layout: nextSlide?.layout,
+                  background: nextSlide?.background,
+                  alignHorizontal: nextSlide?.alignHorizontal,
+                  alignVertical: nextSlide?.alignVertical,
+                })}
               >
                 {nextSlide ? (
                   <div
