@@ -104,6 +104,7 @@ npm run e2e:ui         # Playwright UI mode
 - `:::align <left|center|right> <top|middle|bottom>`：設定水平與垂直對齊
 - `:::ratio 35:65`：設定左右比例，會正規化為百分比
 - `:::image-ratio 35:65` 或 `:::imageRatio 35:65`：`ratio` 的別名
+- `::button[文字](連結)`：在簡報中插入按鈕元件
 
 對齊範例：
 
@@ -147,6 +148,24 @@ npm run e2e:ui         # Playwright UI mode
 - `image`：保留型圖片版型；目前建議優先使用 `image-left`、`image-right`、`image-top`
 
 ### 常用 Layout 範例
+
+### 簡報元件
+
+#### Button
+
+在任一頁 Markdown 中加入：
+
+```md
+::button[查看範例](https://example.com)
+```
+
+沒有連結時也可以只寫：
+
+```md
+::button[開始使用]
+```
+
+按鈕可以從左側功能清單拖曳到 Markdown 撰寫區。
 
 #### `title-content`
 

@@ -1,5 +1,6 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { PresentationButton } from "@/components/PresentationButton";
 import type { SlideLayout, SlideRatio } from "@/lib/deck";
 
 interface SlideMarkdownProps {
@@ -42,6 +43,27 @@ interface TwoColsHeaderParts {
   right: string;
 }
 
+interface ButtonDirective {
+  /** 按鈕文字 */
+  label: string;
+  /** 按鈕連結 */
+  href?: string;
+}
+
+type MarkdownSegment =
+  | {
+      /** 一般 Markdown 內容 */
+      type: "markdown";
+      /** 片段內容 */
+      content: string;
+    }
+  | {
+      /** 按鈕元件 */
+      type: "button";
+      /** 按鈕設定 */
+      button: ButtonDirective;
+    };
+
 /**
  * 解析 two-cols 內容
  * 使用 `::right::` 分割左右欄
@@ -82,11 +104,79 @@ function parseTwoColsHeader(markdown: string): TwoColsHeaderParts {
 }
 
 /**
+ * 解析單行按鈕元件語法
+ * 支援 `::button[文字]` 與 `::button[文字](連結)`
+ */
+function parseButtonDirective(line: string): ButtonDirective | undefined {
+  const match = line.trim().match(/^::button\[(.+)](?:\((.+)\))?$/);
+  if (!match) {
+    return undefined;
+  }
+
+  return {
+    label: match[1]?.trim() ?? "Button",
+    href: match[2]?.trim() || undefined,
+  };
+}
+
+/**
+ * 將 Markdown 切成一般內容與簡報元件片段
+ */
+function parseMarkdownSegments(content: string): MarkdownSegment[] {
+  const segments: MarkdownSegment[] = [];
+  const markdownBuffer: string[] = [];
+
+  content.split("\n").forEach((line) => {
+    const button = parseButtonDirective(line);
+    if (!button) {
+      markdownBuffer.push(line);
+      return;
+    }
+
+    const markdownContent = markdownBuffer.join("\n").trim();
+    if (markdownContent) {
+      segments.push({ type: "markdown", content: markdownContent });
+    }
+    markdownBuffer.length = 0;
+    segments.push({ type: "button", button });
+  });
+
+  const restContent = markdownBuffer.join("\n").trim();
+  if (restContent) {
+    segments.push({ type: "markdown", content: restContent });
+  }
+
+  return segments;
+}
+
+/**
  * 渲染 Markdown 區塊
  * 統一 remark 設定，避免重複
  */
 function MarkdownBlock({ content }: { content: string }) {
-  return <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>;
+  const segments = parseMarkdownSegments(content);
+  return (
+    <>
+      {segments.map((segment, index) => {
+        if (segment.type === "button") {
+          return (
+            <div className="slide-component-row" key={`button-${index}`}>
+              <PresentationButton
+                href={segment.button.href}
+                label={segment.button.label}
+              />
+            </div>
+          );
+        }
+
+        return (
+          <ReactMarkdown key={`markdown-${index}`} remarkPlugins={[remarkGfm]}>
+            {segment.content}
+          </ReactMarkdown>
+        );
+      })}
+    </>
+  );
 }
 
 /**

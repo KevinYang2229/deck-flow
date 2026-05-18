@@ -8,6 +8,8 @@
 - 用 React 呈現專業播放體驗
 - 用版本控制管理每一次簡報變更
 
+::button[查看範例](https://example.com)
+
 :::notes
 開場先定義 DeckFlow：它不是另一個投影片編輯器，而是讓技術團隊把簡報納入日常開發流程的 runtime。
 
