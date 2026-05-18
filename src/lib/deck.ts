@@ -18,7 +18,8 @@ export type SlideLayout =
   | "image-left"
   | "image-right"
   | "two-cols"
-  | "two-cols-header";
+  | "two-cols-header"
+  | "three-cols-header";
 
 /** 左右比例定義 */
 export interface SlideRatio {
@@ -195,7 +196,7 @@ function extractSlideDirectives(content: string, defaultLayout: SlideLayout): {
     }
 
     const layoutMatch = firstLine.match(
-      /^:::\s*layout\s+(default|cover|center|intro|quote|section|statement|fact|end|full|title-content|three-cols|cards|image|image-top|image-left|image-right|two-cols|two-cols-header)$/i,
+      /^:::\s*layout\s+(default|cover|center|intro|quote|section|statement|fact|end|full|title-content|three-cols|three-cols-header|cards|image|image-top|image-left|image-right|two-cols|two-cols-header)$/i,
     );
     if (layoutMatch) {
       layout = layoutMatch[1]!.toLowerCase() as SlideLayout;

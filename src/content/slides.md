@@ -333,6 +333,92 @@ statement layout 適合收束產品價值。可以放慢語速，讓觀眾記住
 
 ---
 
+:::layout two-cols-header
+:::align left top
+:::ratio 40:60
+
+## 兩欄含頁首版型
+
+頁首先點題，下面兩欄做正反、前後或方法對比。
+
+::left::
+
+### Before
+
+- 排版要逐頁手刻
+- 內容散落在多份檔案
+- 版本變更難以追蹤
+
+::right::
+
+### After
+
+- 用 Markdown 維護內容
+- 一份原始檔即可預覽
+- 任何變更都進入 git
+
+:::notes
+適合「現況 vs. 改善」、「優點 vs. 缺點」、「方案 A vs. 方案 B」這類對比敘事。
+
+---
+
+:::layout three-cols-header
+:::align left top
+
+## 三欄含頁首版型
+
+把核心訊息放頁首，下方三欄並列做對照。
+
+::left::
+
+### 計畫
+
+- 目標
+- 範圍
+- 風險
+
+::middle::
+
+### 執行
+
+- 任務分派
+- 進度追蹤
+- 阻塞處理
+
+::right::
+
+### 驗收
+
+- 成果展示
+- 客戶回饋
+- 後續優化
+
+:::notes
+適合用於工作流程、生命週期、PDCA 等三段式對比，頁首集中講方法、欄位拆執行重點。
+
+---
+
+:::layout two-cols
+:::align left middle
+:::ratio 48:52
+
+## 圖片元件
+
+用 `::image[替代文字](URL){寬度}(說明)` 把圖片放進任何版型。
+
+- **替代文字**：必填，維持無障礙
+- **寬度**：選填，支援 % 與 px
+- **說明**：選填，自動置中顯示
+
+::right::
+
+::image[DeckFlow 視覺示例](https://images.unsplash.com/photo-1515879218367-8466d910aaa4?auto=format&fit=crop&w=1400&q=80)(來自 Unsplash 的視覺示例)
+
+:::notes
+示範圖片元件搭配 two-cols 版型：左側講重點、右側放大圖。
+
+---
+
 :::layout end
 :::align center middle
 

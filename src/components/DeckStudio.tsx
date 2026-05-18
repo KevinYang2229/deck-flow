@@ -71,6 +71,8 @@ interface VerticalAlignmentOption {
   value: VerticalAlignment;
 }
 
+const DEFAULT_BLANK_SLIDE = '# 新投影片\n\n從左側功能列拖入元件開始編輯。';
+
 const markdownTools: MarkdownTool[] = [
   {
     label: '標題內容',
@@ -79,11 +81,32 @@ const markdownTools: MarkdownTool[] = [
     placeholder: '標題',
   },
   {
+    label: '兩欄',
+    group: '版型',
+    markdown:
+      ':::layout two-cols\n\n### 左欄\n\n- 重點一\n\n::right::\n\n### 右欄\n\n- 重點二\n',
+    placeholder: '左欄',
+  },
+  {
+    label: '兩欄含頁首',
+    group: '版型',
+    markdown:
+      ':::layout two-cols-header\n\n## 共用頁首\n\n::left::\n\n### 左欄\n\n- 重點一\n\n::right::\n\n### 右欄\n\n- 重點二\n',
+    placeholder: '共用頁首',
+  },
+  {
     label: '三欄',
     group: '版型',
     markdown:
       ':::layout three-cols\n\n### 左欄\n\n- 重點一\n\n::middle::\n\n### 中欄\n\n- 重點二\n\n::right::\n\n### 右欄\n\n- 重點三\n',
     placeholder: '左欄',
+  },
+  {
+    label: '三欄含頁首',
+    group: '版型',
+    markdown:
+      ':::layout three-cols-header\n\n## 共用頁首\n\n::left::\n\n### 左欄\n\n- 重點一\n\n::middle::\n\n### 中欄\n\n- 重點二\n\n::right::\n\n### 右欄\n\n- 重點三\n',
+    placeholder: '共用頁首',
   },
   {
     label: '卡片',
@@ -97,6 +120,22 @@ const markdownTools: MarkdownTool[] = [
     group: '版型',
     markdown:
       ':::layout image-top\n:::bg https://images.unsplash.com/photo-1515879218367-8466d910aaa4?auto=format&fit=crop&w=1400&q=80\n\n## 上圖下文\n\n這裡放主要內容。\n',
+    placeholder:
+      'https://images.unsplash.com/photo-1515879218367-8466d910aaa4?auto=format&fit=crop&w=1400&q=80',
+  },
+  {
+    label: '左圖右文',
+    group: '版型',
+    markdown:
+      ':::layout image-left\n:::bg https://images.unsplash.com/photo-1515879218367-8466d910aaa4?auto=format&fit=crop&w=1400&q=80\n\n## 左圖右文\n\n這裡放主要內容。\n',
+    placeholder:
+      'https://images.unsplash.com/photo-1515879218367-8466d910aaa4?auto=format&fit=crop&w=1400&q=80',
+  },
+  {
+    label: '右圖左文',
+    group: '版型',
+    markdown:
+      ':::layout image-right\n:::bg https://images.unsplash.com/photo-1515879218367-8466d910aaa4?auto=format&fit=crop&w=1400&q=80\n\n## 右圖左文\n\n這裡放主要內容。\n',
     placeholder:
       'https://images.unsplash.com/photo-1515879218367-8466d910aaa4?auto=format&fit=crop&w=1400&q=80',
   },
@@ -137,6 +176,13 @@ const markdownTools: MarkdownTool[] = [
     group: '元件',
     markdown: '::button[了解更多](https://example.com)\n',
     placeholder: '了解更多',
+  },
+  {
+    label: '圖片',
+    group: '元件',
+    markdown:
+      '::image[替代文字](https://images.unsplash.com/photo-1515879218367-8466d910aaa4?auto=format&fit=crop&w=1400&q=80){60%}(圖片說明)\n',
+    placeholder: '替代文字',
   },
   {
     label: '表格',
@@ -410,6 +456,10 @@ export function DeckStudio() {
     index: number;
     position: 'before' | 'after';
   } | null>(null);
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedIndices, setSelectedIndices] = useState<Set<number>>(
+    () => new Set(),
+  );
   const editorRef = useRef<HTMLTextAreaElement | null>(null);
   const [currentFileHandle, setCurrentFileHandle] =
     useState<FileHandleLike | null>(null);
@@ -506,6 +556,12 @@ export function DeckStudio() {
         return;
       }
 
+      // 值沒變時不要設旗標，否則會吞掉下一次本地真正觸發的 send
+      if (
+        message.payload.activeIndex === useDeckStore.getState().activeIndex
+      ) {
+        return;
+      }
       isApplyingRemoteSyncRef.current = true;
       setActiveIndex(message.payload.activeIndex);
     }
@@ -740,6 +796,76 @@ export function DeckStudio() {
       nextActiveIndex = safeIndex + 1;
     }
     setActiveIndex(nextActiveIndex);
+  }
+
+  /** 切換選取模式；關閉時清空已選取 */
+  function handleToggleSelectionMode(): void {
+    setIsSelectionMode((prev) => {
+      if (prev) {
+        setSelectedIndices(new Set());
+      }
+      return !prev;
+    });
+  }
+
+  /** 切換指定 index 的選取狀態 */
+  function handleToggleSelected(index: number): void {
+    setSelectedIndices((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) {
+        next.delete(index);
+      } else {
+        next.add(index);
+      }
+      return next;
+    });
+  }
+
+  /** 全選目前所有投影片 */
+  function handleSelectAll(): void {
+    setSelectedIndices(new Set(slides.map((_, index) => index)));
+  }
+
+  /** 批次刪除選取的投影片；若會清空則自動補一張空白投影片 */
+  function handleBatchDelete(): void {
+    if (selectedIndices.size === 0) {
+      return;
+    }
+
+    const chunks = markdown
+      .split(/\n-{3,}\n/g)
+      .map((chunk) => chunk.replace(/^\s+|\s+$/g, ''))
+      .filter(Boolean);
+
+    const willClearAll = selectedIndices.size >= chunks.length;
+    const confirmMessage = willClearAll
+      ? `將刪除全部 ${chunks.length} 張投影片並保留一張空白頁，確定嗎？`
+      : `確定要刪除選取的 ${selectedIndices.size} 張投影片嗎？`;
+    const confirmed = window.confirm(confirmMessage);
+    if (!confirmed) {
+      return;
+    }
+
+    const remaining = chunks.filter((_, index) => !selectedIndices.has(index));
+    if (remaining.length === 0) {
+      remaining.push(DEFAULT_BLANK_SLIDE);
+    }
+    setMarkdown(remaining.join('\n\n---\n\n'));
+
+    const deletedBeforeActive = Array.from(selectedIndices).filter(
+      (index) => index < safeIndex,
+    ).length;
+    const wasActiveDeleted = selectedIndices.has(safeIndex);
+    const nextIndex = clamp(
+      wasActiveDeleted
+        ? Math.max(0, safeIndex - deletedBeforeActive)
+        : safeIndex - deletedBeforeActive,
+      0,
+      remaining.length - 1,
+    );
+    setActiveIndex(nextIndex);
+    setSelectedIndices(new Set());
+    setIsSelectionMode(false);
   }
 
   /** 從縮圖切換投影片，並同步捲動 Markdown 編輯器到對應頁面 */
@@ -1594,15 +1720,27 @@ export function DeckStudio() {
           </section>
 
           <section className="glass-card flex min-h-[22rem] flex-col overflow-hidden rounded-2xl p-3 lg:min-h-0">
-            <h2 className="title-font mb-2 shrink-0 px-1 text-lg font-bold">
-              縮圖導覽
-            </h2>
+            <div className="mb-2 flex shrink-0 items-center justify-between px-1">
+              <h2 className="title-font text-lg font-bold">縮圖導覽</h2>
+              <button
+                type="button"
+                className={`rounded px-2 py-0.5 text-xs font-medium transition ${
+                  isSelectionMode
+                    ? 'bg-(--color-primary) text-white'
+                    : 'text-(--color-text-muted) hover:bg-black/5 dark:hover:bg-white/10'
+                }`}
+                onClick={handleToggleSelectionMode}
+              >
+                {isSelectionMode ? '完成' : '選取'}
+              </button>
+            </div>
             <div
               ref={editorThumbsRef}
               className="app-scrollbar min-h-0 flex-1 space-y-2 overflow-y-auto px-1 pt-1 pb-1"
             >
               {slides.map((slide, index) => {
                 const isDragging = draggedThumbIndex === index;
+                const isSelected = selectedIndices.has(index);
                 const showIndicatorBefore =
                   thumbDropIndicator?.index === index &&
                   thumbDropIndicator.position === 'before';
@@ -1610,16 +1748,33 @@ export function DeckStudio() {
                   thumbDropIndicator?.index === index &&
                   thumbDropIndicator.position === 'after';
                 return (
-                  <div key={slide.id} className="relative">
+                  <div key={slide.id} className="group relative">
                     {showIndicatorBefore && (
                       <div className="pointer-events-none absolute -top-1 right-1 left-1 z-10 h-0.5 rounded-full bg-[var(--color-primary)]" />
                     )}
+                    {isSelectionMode && (
+                      <span
+                        aria-hidden="true"
+                        className={`pointer-events-none absolute top-2.5 left-2.5 z-20 flex h-4.5 w-4.5 items-center justify-center rounded-sm border text-[11px] leading-none font-bold shadow-sm ${
+                          isSelected
+                            ? 'border-(--color-primary) bg-(--color-primary) text-white'
+                            : 'border-(--color-text-muted)/60 bg-white dark:bg-black/60'
+                        }`}
+                      >
+                        {isSelected ? '✓' : ''}
+                      </span>
+                    )}
                     <button
                       type="button"
-                      draggable
+                      draggable={!isSelectionMode}
                       data-thumb-index={index}
-                      className={`thumb-card w-full cursor-grab active:cursor-grabbing ${index === safeIndex ? 'thumb-card-active' : ''} ${isDragging ? 'opacity-40' : ''}`}
+                      aria-pressed={isSelectionMode ? isSelected : undefined}
+                      className={`thumb-card w-full ${isSelectionMode ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing'} ${index === safeIndex && !isSelectionMode ? 'thumb-card-active' : ''} ${isSelected ? 'ring-2 ring-(--color-primary)' : ''} ${isDragging ? 'opacity-40' : ''}`}
                       onClick={(event) => {
+                        if (isSelectionMode) {
+                          handleToggleSelected(index);
+                          return;
+                        }
                         handleSelectSlideFromThumbnail(index);
                         const target =
                           event.currentTarget.nextElementSibling ??
@@ -1682,7 +1837,9 @@ export function DeckStudio() {
                         setThumbDropIndicator(null);
                       }}
                     >
-                      <p className="mb-1 text-xs font-semibold text-[var(--color-primary)]">
+                      <p
+                        className={`mb-1 text-xs font-semibold text-[var(--color-primary)] ${isSelectionMode ? 'invisible' : ''}`}
+                      >
                         #{index + 1}
                       </p>
                       <p className="thumb-title text-left text-sm font-semibold text-[var(--color-text)]">
@@ -1696,6 +1853,30 @@ export function DeckStudio() {
                 );
               })}
             </div>
+            {isSelectionMode && (
+              <div className="mt-2 flex shrink-0 flex-col gap-2 rounded-lg border border-(--color-border) bg-(--color-surface) px-3 py-2.5 text-xs shadow-sm">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-(--color-text)">
+                    已選 {selectedIndices.size} / {slides.length}
+                  </span>
+                  <button
+                    type="button"
+                    className="rounded px-2 py-0.5 text-(--color-text-muted) hover:bg-black/5 dark:hover:bg-white/10"
+                    onClick={handleSelectAll}
+                  >
+                    全選
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  disabled={selectedIndices.size === 0}
+                  className="w-full rounded-md bg-red-500 px-3 py-1.5 font-medium text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-40"
+                  onClick={handleBatchDelete}
+                >
+                  刪除 {selectedIndices.size > 0 ? `(${selectedIndices.size})` : ''}
+                </button>
+              </div>
+            )}
           </section>
         </main>
       )}
